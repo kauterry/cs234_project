@@ -17,7 +17,7 @@ low = 21.0
 high = 49.0
 dosage = valid_data[:, 34].astype(np.float)
 
-# Function which converts continuous dosage values to discretized values (0.0, 0.5, 0.1)
+# Converts continuous dosage values to discretized values (0.0, 0.5, 0.1)
 def dosage_discretize(dosage):
 	discrete_dosage = []
 	for dose in dosage.tolist():
