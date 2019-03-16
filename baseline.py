@@ -197,17 +197,16 @@ for patient in valid_data:
 		ages.append(float(patient[4][0]))
 	if type(patient[5]) == str:
 		height_count += 1
-		height_sum += float(patient[6])
+		height_sum += float(patient[5])
 	if type(patient[6]) == str:
 		weight_count += 1
 		weight_sum += float(patient[6])
 
 ages = sorted(ages)
-median_age = (ages[age_count//2 - 1] + ages[age_count//2])/2
+median_age = int((ages[age_count//2 - 1] + ages[age_count//2])/2)
 height_avg = height_sum/height_count
 weight_avg = weight_sum/weight_count
 
-# Using unknowns as features
 gender = []
 race = []
 ethnicity = []
@@ -222,6 +221,7 @@ vk6853 = []
 vk9041 = []
 vk7566 = []
 vk961 = []
+bias = []
 
 def one_hot(feature, str1, str2, query):
 	if type(query) == float:
@@ -255,24 +255,17 @@ for patient in valid_data:
 	else:
 		ethnicity.append([0.0, 0.0, 1.0])
 	if type(patient[4]) == float:
-		age_decades.append([median_age])
+		age_decades.append(median_age - 1)
 	else:
-		age_decades.append([float(patient[4][0])])
+		age_decades.append(int(patient[4][0]) - 1)
 	if type(patient[5]) == float:
-		height_cm.append([height_avg])
+		height_cm.append(height_avg)
 	else:
-		height_cm.append([float(patient[5])])
+		height_cm.append(float(patient[5]))
 	if type(patient[6]) == float:
-		weight_kg.append([weight_avg])
+		weight_kg.append(weight_avg)
 	else:
-		weight_kg.append([float(patient[6])])
-	one_hot(vk3673, 'A/A', 'A/G', patient[41])
-	one_hot(vk5808, 'G/G', 'G/T', patient[43])
-	one_hot(vk6484, 'C/C', 'C/T', patient[45])
-	one_hot(vk6853, 'C/C', 'C/G', patient[47])
-	one_hot(vk9041, 'A/A', 'A/G', patient[49])
-	one_hot(vk7566, 'C/C', 'C/T', patient[51])
-	one_hot(vk961, 'A/A', 'A/C', patient[53])
+		weight_kg.append(float(patient[6]))
 	if patient[37] == '*1/*1':
 		cyp2.append([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 	elif patient[37] == '*1/*2':
@@ -287,6 +280,54 @@ for patient in valid_data:
 		cyp2.append([0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0])
 	else:
 		cyp2.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+	one_hot(vk3673, 'A/A', 'A/G', patient[41])
+	one_hot(vk5808, 'G/G', 'G/T', patient[43])
+	one_hot(vk6484, 'C/C', 'C/T', patient[45])
+	one_hot(vk6853, 'C/C', 'C/G', patient[47])
+	one_hot(vk9041, 'A/A', 'A/G', patient[49])
+	one_hot(vk7566, 'C/C', 'C/T', patient[51])
+	one_hot(vk961, 'A/A', 'A/C', patient[53])
+	bias.append([1.0])
 
-features = [g + r + e + a + h + w + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 for g, r, e, a, h, w, c, v1, v2, v3, v4, v5, v6, v7 in \
-zip(gender, race, ethnicity, age_decades, height_cm, weight_kg, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961)]
+age_decades = np.array(age_decades)
+age_bins = 9
+age_features = np.zeros((num_patients, age_bins))
+age_features[np.arange(num_patients), age_decades] = 1.0
+
+height_bins = 8
+height_discrete = np.array([min(int((height - 120)/10), height_bins - 1) for height in height_cm])
+height_features = np.zeros((num_patients, height_bins))
+height_features[np.arange(num_patients), height_discrete] = 1.0
+
+weight_bins = 10
+weight_discrete = np.array([min(int((weight - 30)/20), weight_bins - 1) for weight in weight_kg])
+weight_features = np.zeros((num_patients, weight_bins))
+weight_features[np.arange(num_patients), weight_discrete] = 1.0
+
+features = np.array([g + r + e + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, c, v1, v2, v3, v4, v5, v6, v7, b in \
+zip(gender, race, ethnicity, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
+
+features = np.column_stack((features, age_features, height_features, weight_features))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
