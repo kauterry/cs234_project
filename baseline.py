@@ -179,3 +179,114 @@ prediction_pd = np.square(5.6044 - 0.2614*age_decades + 0.0087*height_cm + 0.012
 - 0.1092*asian_race - 0.2760*black_afro - 0.1032*missing_mixed + 1.1816*enzyme - 0.5503*amiodarone)
 pd_dosage = dosage_discretize(prediction_pd)
 pf_pharma = np.count_nonzero(pd_dosage == true_dosage)/n_patient
+
+
+# Feature engineering
+
+# Median age, average height, average weight
+age_count = 0
+ages = []
+height_count = 0
+height_sum = 0
+weight_count = 0
+weight_sum = 0
+
+for patient in valid_data:
+	if type(patient[4]) == str:
+		age_count += 1
+		ages.append(float(patient[4][0]))
+	if type(patient[5]) == str:
+		height_count += 1
+		height_sum += float(patient[6])
+	if type(patient[6]) == str:
+		weight_count += 1
+		weight_sum += float(patient[6])
+
+ages = sorted(ages)
+median_age = (ages[age_count//2 - 1] + ages[age_count//2])/2
+height_avg = height_sum/height_count
+weight_avg = weight_sum/weight_count
+
+# Using unknowns as features
+gender = []
+race = []
+ethnicity = []
+age_decades = []
+height_cm = []
+weight_kg = []
+cyp2 = []
+vk3673 = []
+vk5808 = []
+vk6484 = []
+vk6853 = []
+vk9041 = []
+vk7566 = []
+vk961 = []
+
+def one_hot(feature, str1, str2, query):
+	if type(query) == float:
+		feature.append([0.0, 0.0, 0.0, 1.0])
+	elif query == str1:
+		feature.append([1.0, 0.0, 0.0, 0.0])
+	elif query == str2:
+		feature.append([0.0, 1.0, 0.0, 0.0])
+	else:
+		feature.append([0.0, 0.0, 1.0, 0.0])
+
+for patient in valid_data:
+	if type(patient[1]) == float:
+		gender.append([0.0, 0.0, 1.0])
+	elif patient[1] == 'male':
+		gender.append([1.0, 0.0, 0.0])
+	else:
+		gender.append([0.0, 1.0, 0.0])
+	if patient[2] == 'Asian':
+		race.append([1.0, 0.0, 0.0, 0.0])
+	elif patient[2] == 'White':
+		race.append([0.0, 1.0, 0.0, 0.0])
+	elif patient[2] == 'Black or African American':
+		race.append([0.0, 0.0, 1.0, 0.0])
+	else:
+		race.append([0.0, 0.0, 0.0, 1.0])
+	if patient[3] == 'Hispanic or Latino':
+		ethnicity.append([1.0, 0.0, 0.0])
+	elif patient[3] == 'not Hispanic or Latino':
+		ethnicity.append([0.0, 1.0, 0.0])
+	else:
+		ethnicity.append([0.0, 0.0, 1.0])
+	if type(patient[4]) == float:
+		age_decades.append([median_age])
+	else:
+		age_decades.append([float(patient[4][0])])
+	if type(patient[5]) == float:
+		height_cm.append([height_avg])
+	else:
+		height_cm.append([float(patient[5])])
+	if type(patient[6]) == float:
+		weight_kg.append([weight_avg])
+	else:
+		weight_kg.append([float(patient[6])])
+	one_hot(vk3673, 'A/A', 'A/G', patient[41])
+	one_hot(vk5808, 'G/G', 'G/T', patient[43])
+	one_hot(vk6484, 'C/C', 'C/T', patient[45])
+	one_hot(vk6853, 'C/C', 'C/G', patient[47])
+	one_hot(vk9041, 'A/A', 'A/G', patient[49])
+	one_hot(vk7566, 'C/C', 'C/T', patient[51])
+	one_hot(vk961, 'A/A', 'A/C', patient[53])
+	if patient[37] == '*1/*1':
+		cyp2.append([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+	elif patient[37] == '*1/*2':
+		cyp2.append([0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+	elif patient[37] == '*1/*3':
+		cyp2.append([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
+	elif patient[37] == '*2/*2':
+		cyp2.append([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])		
+	elif patient[37] == '*2/*3':
+		cyp2.append([0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+	elif patient[37] == '*3/*3':
+		cyp2.append([0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+	else:
+		cyp2.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+
+features = [g + r + e + a + h + w + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 for g, r, e, a, h, w, c, v1, v2, v3, v4, v5, v6, v7 in \
+zip(gender, race, ethnicity, age_decades, height_cm, weight_kg, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961)]
