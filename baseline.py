@@ -1,8 +1,13 @@
-import pandas
+import pandas as pd
 import numpy as np
+from sklearn.linear_model import Lasso, LinearRegression
+from matplotlib import pyplot as plt
+import scipy.stats as stats
+
+
 
 # Load data from warfarin.csv
-df = pandas.read_csv('warfarin.csv', header = None)
+df = pd.read_csv('warfarin.csv', header = None)
 data = np.array(df)[1:-1, :-3]
 titles = np.array(df)[0, :-3]
 
@@ -370,11 +375,11 @@ features = np.column_stack((height_features, weight_features, features, right_do
 # print (set(valid_data[:, 12].tolist()))
 
 #Shuffle patients
-runs = 10
+runs = 0
 T = num_patients
 
-regret = np.zeros((T, runs))
-avg_incorrect = np.zeros((T, runs))
+regret = np.zeros((runs, T))
+avg_incorrect = np.zeros((runs, T))
 pf_linucb = np.zeros(runs)
 
 for n in range(runs):
@@ -400,18 +405,140 @@ for n in range(runs):
 		for i in range(K):
 			inv = np.linalg.inv(A[:, :, i])
 			theta[:, i] = np.matmul(inv, b[:, i])
-			ucb = np.dot(x, np.matmul(inv, x))
-			p[i] = np.dot(theta[:, i], x) + alpha*np.sqrt(ucb)
+			bound = np.dot(x, np.matmul(inv, x))
+			p[i] = np.dot(theta[:, i], x) + alpha*np.sqrt(bound)
 		act = np.random.choice(np.flatnonzero(p == np.amax(p)))
 		# linucb_pred[j] = act
 		reward = -1 if ground_truth[j] != act else 0
-		regret[j, n] = regret[j-1, n] - reward if j != 0 else -reward
+		regret[n, j] = regret[n, j-1] - reward if j != 0 else -reward
 		sum_incorrect += -reward 
-		avg_incorrect[j, n] = sum_incorrect/(j+1.0)
+		avg_incorrect[n, j] = sum_incorrect/(j+1.0)
 		A[:, :, act] += np.outer(x, x)
 		b[:, act] += reward*x
 
 	pf_linucb[n] = 1.0 - sum_incorrect/num_patients
 	print (pf_linucb[n])
 
+
+# Plots
+def plot_ci(y, y_label = 'y', x_label = 'x', title = 'Plot'):
+	T = y.shape[1]
+	y_mean = np.mean(y, axis = 0)
+	y_std = np.std(y, axis = 0)
+	z = 1.96
+	upper_ci = y_mean + z*y_std/np.sqrt(runs)
+	lower_ci = y_mean - z*y_std/np.sqrt(runs)
+
+	CI_df = pd.DataFrame(columns = ['x_data', 'low_CI', 'upper_CI'])
+	CI_df['x_data'] = np.arange(1, T+1)
+	CI_df['low_CI'] = lower_ci
+	CI_df['upper_CI'] = upper_ci
+	CI_df.sort_values('x_data', inplace = True)
+
+	_, ax = plt.subplots()
+	# Plot the data, set the linewidth, color and transparency of the
+	# line, provide a label for the legend
+	ax.plot(np.arange(1, T+1), y_mean, lw = 1, color = '#539caf', alpha = 1, label = 'Mean')
+	# Shade the confidence interval
+	ax.fill_between(CI_df['x_data'], CI_df['low_CI'], CI_df['upper_CI'], color = '#539caf', alpha = 0.4, label = '95% CI')
+	# Label the axes and provide a title
+	ax.set_title(title)
+	ax.set_xlabel(x_label)
+	ax.set_ylabel(y_label)
+
+	# Display legend
+	ax.legend(loc = 'best')
+	plt.show()
+
+# plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
+# plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
+
+
+#LASSO Bandit
+features = np.array([g + r + e + age + ind + dia + hrt + val + sm + asp + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, asp, c, v1, v2, v3, v4, v5, v6, v7, b in \
+zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, smoker, aspirin, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
+
+features = np.column_stack((height_features, weight_features, features, right_dosage))
+
+ground_truth = features[:, -1]
+x_input = features[:, :-1]
+
+d = x_input.shape[1]
+T = num_patients
+K = 3
+# T = 1000
+lam1 = 0.05
+lam2 = np.zeros(T+1)
+lam2[0] = 0.05
+q = 1
+h = 5
+
+# Use q to construct force sample set for each action
+t_0 = []
+t_1 = []
+t_2 = []
+
+j0 = np.arange(1-int(q), 1)
+j1 = np.arange(1, int(q)+1) 
+j2 = np.arange(int(q+1), int(2*q)+1) 
+for j in j0:
+	for n in np.arange(11):
+		t_0.append((2**n - 1)*K*q + j)
+for j in j1:
+	for n in np.arange(11):
+		t_1.append((2**n - 1)*K*q + j)
+for j in j2:
+	for n in np.arange(11):
+		t_2.append((2**n - 1)*K*q + j)
+
+forced = np.array([t_0, t_1, t_2])
+all_samp = [[] for i in range(K)]
+rew = np.zeros(K)
+sum_incorrect = 0
+T = 1
+def estimate(X, y, lam):
+	if lam < 1e-3:
+		clf = LinearRegression(fit_intercept = False)
+		clf.fit(X, y)
+	else:
+		clf = Lasso(alpha = lam/2, fit_intercept = False, max_iter=10000)
+		clf.fit(X, y)
+	return clf.coef_
+
+for t in range(T):
+	x = x_input[t]
+	if t in forced:
+	    act = np.where(t == forced)[0][0]
+	else:
+		if t == 0:
+			act = 0
+		else:
+			kappa = []
+			for i in range(K):
+				indices = [index for index in forced[i] if index < t]
+				beta = estimate(x_input[indices], ground_truth[indices], lam1)
+				rew[i] = np.dot(x, beta)
+			rew_bound = np.amax(rew) - h/2
+			for i in range(K):
+				if rew[i] >= rew_bound:
+					kappa.append(i)
+			rew_max = -float('inf')
+			for k in kappa:
+				indices = [index for index in all_samp[k] if index < t]
+				beta = estimate(x_input[indices], ground_truth[indices], lam2[t])
+				reward_all = np.dot(x, beta)
+				if reward_all > rew_max:
+					rew_max = reward_all
+					act = k
+	all_samp[act].append(t)
+	lam2[t+1] = lam2[0]*np.sqrt(np.log((t+1)*d)/(t+1))
+	reward = -1 if ground_truth[t] != act else 0
+	# regret[n, j] = regret[n, j-1] - reward if j != 0 else -reward
+	sum_incorrect += -reward 
+	pf = 1.0 - sum_incorrect/(t+1)
+	print (t, pf)
+	# avg_incorrect[n, j] = sum_incorrect/(j+1.0)
+
+pf_lasso = 1.0 - sum_incorrect/T
+print ("Final Performance", pf_lasso)
 
