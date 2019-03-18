@@ -497,13 +497,14 @@ rew = np.zeros(K)
 sum_incorrect = 0
 
 def estimate(X, y, lam):
-	if lam < 1e-3:
-		clf = LinearRegression(fit_intercept = False)
-		clf.fit(X, y)
-	else:
-		clf = Lasso(alpha = lam/2, fit_intercept = False, max_iter=10000)
-		clf.fit(X, y)
-	return clf.coef_
+	# if lam < 1e-3:
+	# 	clf = LinearRegression()
+	# 	clf.fit(X, y)
+	# 	print ("Boom")
+	# else:
+	clf = Lasso(alpha = lam/2)
+	clf.fit(X, y)
+	return clf.coef_, clf.intercept_
 
 for t in range(T):
 	x = x_input[t]
@@ -513,20 +514,20 @@ for t in range(T):
 		if t == 0:
 			act = 0
 		else:
-			kappa = []
 			for i in range(K):
 				indices = [index for index in forced[i] if index < t]
-				beta = estimate(x_input[indices], ground_truth[indices], lam1)
-				rew[i] = np.dot(x, beta)
+				beta, intercept = estimate(x_input[indices], ground_truth[indices], lam1)
+				rew[i] = np.dot(x, beta) + intercept
 			rew_bound = np.amax(rew) - h/2
+			kappa = []
 			for i in range(K):
 				if rew[i] >= rew_bound:
 					kappa.append(i)
 			rew_max = -float('inf')
 			for k in kappa:
 				indices = [index for index in all_samp[k] if index < t]
-				beta = estimate(x_input[indices], ground_truth[indices], lam2[t])
-				reward_all = np.dot(x, beta)
+				beta, intercept = estimate(x_input[indices], ground_truth[indices], lam2[t])
+				reward_all = np.dot(x, beta) + intercept
 				if reward_all > rew_max:
 					rew_max = reward_all
 					act = k
