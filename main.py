@@ -4,8 +4,6 @@ from sklearn.linear_model import Lasso, LinearRegression
 from matplotlib import pyplot as plt
 import scipy.stats as stats
 
-
-
 # Load data from warfarin.csv
 df = pd.read_csv('warfarin.csv', header = None)
 data = np.array(df)[1:-1, :-3]
@@ -460,18 +458,12 @@ zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, sm
 
 features = np.column_stack((height_features, weight_features, features, right_dosage))
 
-ground_truth = features[:, -1]
-x_input = features[:, :-1]
+# print (x_input[2], ground_truth[2])
 
-d = x_input.shape[1]
+d = features.shape[1] - 1
 T = num_patients
 K = 3
-# T = 1000
-lam1 = 0.05
-lam2 = np.zeros(T+1)
-lam2[0] = 0.05
-q = 1
-h = 5
+
 
 # Use q to construct force sample set for each action
 t_0 = []
@@ -492,54 +484,71 @@ for j in j2:
 		t_2.append((2**n - 1)*K*q + j)
 
 forced = np.array([t_0, t_1, t_2])
-all_samp = [[] for i in range(K)]
-rew = np.zeros(K)
-sum_incorrect = 0
 
-def estimate(X, y, lam):
-	# if lam < 1e-3:
-	# 	clf = LinearRegression()
-	# 	clf.fit(X, y)
-	# 	print ("Boom")
-	# else:
-	clf = Lasso(alpha = lam/2)
-	clf.fit(X, y)
-	return clf.coef_, clf.intercept_
+runs = 10
+regret = np.zeros((runs, T))
+avg_incorrect = np.zeros((runs, T))
 
-for t in range(T):
-	x = x_input[t]
-	if t in forced:
-	    act = np.where(t == forced)[0][0]
-	else:
-		if t == 0:
-			act = 0
+def estimate(X, Y, lam, x):
+	clf = Lasso(alpha = lam/2,  max_iter=10000)
+	clf.fit(X, Y)
+	y = clf.predict(np.expand_dims(x, axis = 0))
+	return y
+
+for n in range(runs):
+
+	np.random.shuffle(features)
+	ground_truth = features[:, -1]
+	x_input = features[:, :-1]
+	sum_incorrect = 0
+
+	runs = 10
+	all_samp = [[] for i in range(K)]
+	rew = np.zeros(K)
+	Y_t = np.zeros(T)
+	lam2 = np.zeros(T+1)
+	lam2[0] = 0.05
+	lam1 = 0.05
+	q = 1
+	h = 5
+	
+
+	for t in range(T):
+		x = x_input[t]
+		if t in forced:
+			act = np.where(t == forced)[0][0]
 		else:
-			for i in range(K):
-				indices = [index for index in forced[i] if index < t]
-				beta, intercept = estimate(x_input[indices], ground_truth[indices], lam1)
-				rew[i] = np.dot(x, beta) + intercept
-			rew_bound = np.amax(rew) - h/2
-			kappa = []
-			for i in range(K):
-				if rew[i] >= rew_bound:
-					kappa.append(i)
-			rew_max = -float('inf')
-			for k in kappa:
-				indices = [index for index in all_samp[k] if index < t]
-				beta, intercept = estimate(x_input[indices], ground_truth[indices], lam2[t])
-				reward_all = np.dot(x, beta) + intercept
-				if reward_all > rew_max:
-					rew_max = reward_all
-					act = k
-	all_samp[act].append(t)
-	lam2[t+1] = lam2[0]*np.sqrt(np.log((t+1)*d)/(t+1))
-	reward = -1 if ground_truth[t] != act else 0
-	# regret[n, j] = regret[n, j-1] - reward if j != 0 else -reward
-	sum_incorrect += -reward 
-	pf = 1.0 - sum_incorrect/(t+1)
-	print (t, pf, act)
-	# avg_incorrect[n, j] = sum_incorrect/(j+1.0)
+			if t == 0:
+				act = 0
+			else:
+				for i in range(K):
+					indices = [index for index in forced[i] if index < t]
+					rew[i] = estimate(x_input[indices], Y_t[indices], lam1, x)
+				rew_bound = np.amax(rew) - h/2
+				kappa = []
+				for i in range(K):
+					if rew[i] >= rew_bound:
+						kappa.append(i)
+				rew_max = -float('inf')
+				for k in kappa:
+					indices = [index for index in all_samp[k] if index < t]
+					reward_all = estimate(x_input[indices], Y_t[indices], lam2[t], x)
+					if reward_all >= rew_max:
+						rew_max = reward_all
+						act = k
+		all_samp[act].append(t)
+		lam2[t+1] = lam2[0]*np.sqrt(np.log((t+1)*d)/(t+1))
+		reward = -1 if ground_truth[t] != act else 0
+		Y_t[t] = reward
+		regret[n, t] = regret[n, t-1] - reward if j != 0 else -reward
+		sum_incorrect += -reward 
+		pf = 1 - sum_incorrect/(t+1)
+		# print (t, pf)
+		avg_incorrect[n, t] = sum_incorrect/(t+1.0)
 
-pf_lasso = 1.0 - sum_incorrect/T
-print ("Final Performance", pf_lasso)
+	pf_lasso = 1.0 - sum_incorrect/T
+	print (n, "Performance", pf_lasso)
+
+# plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
+# plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
 
