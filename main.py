@@ -370,7 +370,8 @@ zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, sm
 
 features = np.column_stack((height_features, weight_features, features, right_dosage))
 
-# print (set(valid_data[:, 12].tolist()))
+# for i in range(13, 38):
+# 	print (i, set(valid_data[:, i].tolist()))
 
 #Shuffle patients
 runs = 0
@@ -378,7 +379,6 @@ T = num_patients
 
 regret = np.zeros((runs, T))
 avg_incorrect = np.zeros((runs, T))
-pf_linucb = np.zeros(runs)
 
 for n in range(runs):
 
@@ -414,8 +414,8 @@ for n in range(runs):
 		A[:, :, act] += np.outer(x, x)
 		b[:, act] += reward*x
 
-	pf_linucb[n] = 1.0 - sum_incorrect/num_patients
-	print (pf_linucb[n])
+	pf_linucb = 1.0 - sum_incorrect/num_patients
+	print (pf_linucb)
 
 
 # Plots
@@ -459,35 +459,17 @@ zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, sm
 features = np.column_stack((height_features, weight_features, features, right_dosage))
 
 # print (x_input[2], ground_truth[2])
-
+runs = 0
 d = features.shape[1] - 1
 T = num_patients
 K = 3
-
-
-# Use q to construct force sample set for each action
-t_0 = []
-t_1 = []
-t_2 = []
-
-j0 = np.arange(1-int(q), 1)
-j1 = np.arange(1, int(q)+1) 
-j2 = np.arange(int(q+1), int(2*q)+1) 
-for j in j0:
-	for n in np.arange(11):
-		t_0.append((2**n - 1)*K*q + j)
-for j in j1:
-	for n in np.arange(11):
-		t_1.append((2**n - 1)*K*q + j)
-for j in j2:
-	for n in np.arange(11):
-		t_2.append((2**n - 1)*K*q + j)
-
-forced = np.array([t_0, t_1, t_2])
-
-runs = 10
 regret = np.zeros((runs, T))
 avg_incorrect = np.zeros((runs, T))
+lam1 = 0.05
+q = 1
+h = 5
+
+forced = np.array([[(2**n - 1)*K*q + j for n in np.arange(11) for j in np.arange(1 + (i-1)*int(q), 1 + int(i*q))] for i in range(K)])
 
 def estimate(X, Y, lam, x):
 	clf = Lasso(alpha = lam/2,  max_iter=10000)
@@ -501,17 +483,11 @@ for n in range(runs):
 	ground_truth = features[:, -1]
 	x_input = features[:, :-1]
 	sum_incorrect = 0
-
-	runs = 10
 	all_samp = [[] for i in range(K)]
 	rew = np.zeros(K)
 	Y_t = np.zeros(T)
 	lam2 = np.zeros(T+1)
 	lam2[0] = 0.05
-	lam1 = 0.05
-	q = 1
-	h = 5
-	
 
 	for t in range(T):
 		x = x_input[t]
@@ -540,14 +516,14 @@ for n in range(runs):
 		lam2[t+1] = lam2[0]*np.sqrt(np.log((t+1)*d)/(t+1))
 		reward = -1 if ground_truth[t] != act else 0
 		Y_t[t] = reward
-		regret[n, t] = regret[n, t-1] - reward if j != 0 else -reward
+		regret[n, t] = regret[n, t-1] - reward if t != 0 else -reward
 		sum_incorrect += -reward 
 		pf = 1 - sum_incorrect/(t+1)
-		# print (t, pf)
+		print (t, pf)
 		avg_incorrect[n, t] = sum_incorrect/(t+1.0)
 
 	pf_lasso = 1.0 - sum_incorrect/T
-	print (n, "Performance", pf_lasso)
+	print ("Performance", pf_lasso)
 
 # plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
 # plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
