@@ -1,8 +1,7 @@
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import Lasso, LinearRegression
+from sklearn.linear_model import Lasso
 from matplotlib import pyplot as plt
-import scipy.stats as stats
 
 # Load data from warfarin.csv
 df = pd.read_csv('warfarin.csv', header = None)
@@ -183,7 +182,7 @@ prediction_pd = np.square(5.6044 - 0.2614*age_decades + 0.0087*height_cm + 0.012
 pd_dosage = dosage_discretize(prediction_pd)
 pf_pharma = np.count_nonzero(pd_dosage == true_dosage)/n_patient
 
-print (pf_fixed, pf_clinical, pf_pharma)
+# print (pf_fixed, pf_clinical, pf_pharma)
 
 # Feature engineering
 
@@ -217,12 +216,12 @@ ethnicity = []
 age_decades = []
 height_cm = []
 weight_kg = []
-indication = []
+diagnosis = []
 diabetes = []
 heart = []
 valve = []
 smoker = []
-aspirin = []
+medic = [[] for i in range(18)]
 cyp2 = []
 vk3673 = []
 vk5808 = []
@@ -287,17 +286,24 @@ for patient in valid_data:
 	if type(patient[7]) == float:
 		array = np.zeros(9)
 		array[0] = 1.0
-		indication.append(array.tolist())
+		diagnosis.append(array.tolist())
 	else:
 		array = np.zeros(9)
 		lis = [int(c) for c in list(patient[7]) if c.isdigit()]
 		array[lis] = 1.0
-		indication.append(array.tolist())
+		diagnosis.append(array.tolist())
 	three_hot(diabetes, 9)
 	three_hot(heart, 10)
 	three_hot(valve, 11)
 	three_hot(smoker, 36)
-	three_hot(aspirin, 13)
+	for i in range(13, 31):
+		if i != 22:
+			three_hot(medic[i-13], i)  
+		else:
+			if type(patient[i]) == float:
+				medic[i-13].append([0.0, 1.0])
+			else:
+				medic[i-13].append([1.0, 0.0])
 	if patient[37] == '*1/*1':
 		array = np.zeros(12)
 		array[0] = 1
@@ -353,7 +359,6 @@ for patient in valid_data:
 	vkorc1(vk9041, 'A/A', 'A/G', patient[49])
 	vkorc1(vk7566, 'C/C', 'C/T', patient[51])
 	vkorc1(vk961, 'A/A', 'A/C', patient[53])
-	bias.append([1.0])
 
 h_max = max(height_cm)
 h_min = min(height_cm)
@@ -365,13 +370,31 @@ w_min = min(weight_kg)
 weight_kg = np.array(weight_kg)
 weight_features = (weight_kg - w_min)/(w_max - w_min)
 
-features = np.array([g + r + e + age + ind + dia + hrt + val + sm + asp + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, asp, c, v1, v2, v3, v4, v5, v6, v7, b in \
-zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, smoker, aspirin, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
+# features = np.array([g + r + e + age + ind + dia + hrt + val + sm + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, c, v1, v2, v3, v4, v5, v6, v7, b in \
+# zip(gender, race, ethnicity, age_decades, diagnosis, diabetes, heart, valve, smoker, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
 
-features = np.column_stack((height_features, weight_features, features, right_dosage))
+# features = np.column_stack((height_features, weight_features, features, right_dosage))
 
-# for i in range(13, 38):
+# for i in range(13, 32):
 # 	print (i, set(valid_data[:, i].tolist()))
+
+medications = np.array(medic[0])
+for i in range(1, 18):
+	medications = np.column_stack((medications, np.array(medic[i])))
+
+demographics = np.array([g + r + e + age for g, r, e, age in zip(gender, race, ethnicity, age_decades)])
+demographics = np.column_stack((demographics, height_features, weight_features))
+
+diagnosis = np.array(diagnosis)
+
+preexisting = np.array([dia + hrt + val + sm for dia, hrt, val, sm in zip(diabetes, heart, valve, smoker)])
+
+genetics = np.array([c + v1 + v2 + v3 + v4 + v5 + v6 + v7 for c, v1, v2, v3, v4, v5, v6, v7 in \
+zip(cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961)])
+
+bias = np.ones(num_patients)
+
+features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
 
 #Shuffle patients
 runs = 0
@@ -394,7 +417,6 @@ for n in range(runs):
 	b = np.zeros((d, K))
 	theta = np.zeros((d, K))
 	p = np.zeros(K)
-	# linucb_pred = np.zeros(T)
 
 	#Training
 	sum_incorrect = 0
@@ -406,7 +428,6 @@ for n in range(runs):
 			bound = np.dot(x, np.matmul(inv, x))
 			p[i] = np.dot(theta[:, i], x) + alpha*np.sqrt(bound)
 		act = np.random.choice(np.flatnonzero(p == np.amax(p)))
-		# linucb_pred[j] = act
 		reward = -1 if ground_truth[j] != act else 0
 		regret[n, j] = regret[n, j-1] - reward if j != 0 else -reward
 		sum_incorrect += -reward 
@@ -453,13 +474,31 @@ def plot_ci(y, y_label = 'y', x_label = 'x', title = 'Plot'):
 
 
 #LASSO Bandit
-features = np.array([g + r + e + age + ind + dia + hrt + val + sm + asp + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, asp, c, v1, v2, v3, v4, v5, v6, v7, b in \
-zip(gender, race, ethnicity, age_decades, indication, diabetes, heart, valve, smoker, aspirin, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
+# features = np.array([g + r + e + age + ind + dia + hrt + val + sm + asp + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, asp, c, v1, v2, v3, v4, v5, v6, v7, b in \
+# zip(gender, race, ethnicity, age_decades, diagnosis, diabetes, heart, valve, smoker, aspirin, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
 
-features = np.column_stack((height_features, weight_features, features, right_dosage))
+# features = np.column_stack((height_features, weight_features, features, right_dosage))
 
 # print (x_input[2], ground_truth[2])
-runs = 0
+
+# for trial in range(1, 2):
+
+trial = 0
+
+if trial == 0:
+	features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
+elif trial == 1:
+	features = np.column_stack((demographics, bias, right_dosage))
+elif trial == 2:
+	features = np.column_stack((diagnosis, bias, right_dosage))
+elif trial == 3:
+	features = np.column_stack((preexisting, bias, right_dosage))
+elif trial == 4:
+	features = np.column_stack((medications, bias, right_dosage))
+elif trial == 5:
+	features = np.column_stack((genetics, bias, right_dosage))
+
+runs = 5
 d = features.shape[1] - 1
 T = num_patients
 K = 3
@@ -472,7 +511,7 @@ h = 5
 forced = np.array([[(2**n - 1)*K*q + j for n in np.arange(11) for j in np.arange(1 + (i-1)*int(q), 1 + int(i*q))] for i in range(K)])
 
 def estimate(X, Y, lam, x):
-	clf = Lasso(alpha = lam/2,  max_iter=10000)
+	clf = Lasso(alpha = lam/2,  max_iter=100000)
 	clf.fit(X, Y)
 	y = clf.predict(np.expand_dims(x, axis = 0))
 	return y
@@ -519,12 +558,12 @@ for n in range(runs):
 		regret[n, t] = regret[n, t-1] - reward if t != 0 else -reward
 		sum_incorrect += -reward 
 		pf = 1 - sum_incorrect/(t+1)
-		print (t, pf)
+		# print (t, pf)
 		avg_incorrect[n, t] = sum_incorrect/(t+1.0)
 
 	pf_lasso = 1.0 - sum_incorrect/T
-	print ("Performance", pf_lasso)
+	print (trial, n, "Performance", pf_lasso)
 
-# plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
-# plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
+plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
+plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
 
