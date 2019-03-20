@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import Lasso
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
 from matplotlib import pyplot as plt
 
 # Load data from warfarin.csv
@@ -394,14 +396,58 @@ zip(cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961)])
 
 bias = np.ones(num_patients)
 
-features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
-
-#Shuffle patients
+features = np.column_stack((demographics, preexisting, genetics, bias, right_dosage))
+# total = 0
 runs = 0
+
+# perform = np.zeros((total, runs))
+# perform_avg = np.zeros(total)
+
+# trial_ind = -1
+# for trial in []:
+# 	trial_ind += 1
+# 	if trial == 0:
+# 		features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
+# 	elif trial == 1:
+# 		features = np.column_stack((demographics, bias, right_dosage))
+# 	elif trial == 2:
+# 		features = np.column_stack((diagnosis, bias, right_dosage))
+# 	elif trial == 3:
+# 		features = np.column_stack((preexisting, bias, right_dosage))
+# 	elif trial == 4:
+# 		features = np.column_stack((medications, bias, right_dosage))
+# 	elif trial == 5:
+# 		features = np.column_stack((genetics, bias, right_dosage))
+# 	elif trial == 6:
+# 		features = np.column_stack((diagnosis, preexisting, medications, genetics, bias, right_dosage))
+# 	elif trial == 7:
+# 		features = np.column_stack((demographics, preexisting, medications, genetics, bias, right_dosage))
+# 	elif trial == 8:
+# 		features = np.column_stack((demographics, diagnosis, medications, genetics, bias, right_dosage))
+# 	elif trial == 9:
+# 		features = np.column_stack((demographics, diagnosis, preexisting, genetics, bias, right_dosage))
+# 	elif trial == 10:
+# 		features = np.column_stack((demographics, diagnosis, preexisting, medications, bias, right_dosage))
+# 	elif trial == 11:
+# 		features = np.column_stack((demographics, diagnosis, genetics, bias, right_dosage))
+# 	elif trial == 12:
+# 		features = np.column_stack((bias, right_dosage))
+# 	elif trial == 13:
+# 		features = np.column_stack((demographics, genetics, bias, right_dosage))
+# 	elif trial == 14:
+# 		features = np.column_stack((demographics, diagnosis, genetics, bias, right_dosage))
+# 	elif trial == 15:
+# 		features = np.column_stack((demographics, preexisting, genetics, bias, right_dosage))
+# 	elif trial == 16:
+# 		features = np.column_stack((demographics, medications, genetics, bias, right_dosage))	
+
+	#Shuffle patients
 T = num_patients
 
 regret = np.zeros((runs, T))
 avg_incorrect = np.zeros((runs, T))
+pf_ucb = np.zeros((runs, T))
+actions = np.zeros(T)
 
 for n in range(runs):
 
@@ -428,90 +474,208 @@ for n in range(runs):
 			bound = np.dot(x, np.matmul(inv, x))
 			p[i] = np.dot(theta[:, i], x) + alpha*np.sqrt(bound)
 		act = np.random.choice(np.flatnonzero(p == np.amax(p)))
+		actions[j] = act
 		reward = -1 if ground_truth[j] != act else 0
 		regret[n, j] = regret[n, j-1] - reward if j != 0 else -reward
 		sum_incorrect += -reward 
-		avg_incorrect[n, j] = sum_incorrect/(j+1.0)
+		avg_incorrect[n, j] = sum_incorrect/(j+1)
+		pf_ucb[n, j] = 1 - sum_incorrect/(j+1)
 		A[:, :, act] += np.outer(x, x)
 		b[:, act] += reward*x
 
-	pf_linucb = 1.0 - sum_incorrect/num_patients
-	print (pf_linucb)
 
+	# perform[trial_ind, n] = 1.0 - sum_incorrect/num_patients
+	# print (trial, n, perform[trial_ind, n])
+# perform_avg[trial_ind] = np.mean(perform[trial_ind])
+# print ("Avg:", perform_avg[trial_ind])
+# print (i, perform[i])
+# print (np.mean(pf_linucb))
 
 # Plots
-def plot_ci(y, y_label = 'y', x_label = 'x', title = 'Plot'):
-	T = y.shape[1]
-	y_mean = np.mean(y, axis = 0)
-	y_std = np.std(y, axis = 0)
-	z = 1.96
-	upper_ci = y_mean + z*y_std/np.sqrt(runs)
-	lower_ci = y_mean - z*y_std/np.sqrt(runs)
+# def plot_ci(y, y_label = 'y', x_label = 'x', title = 'Plot'):
+# 	T = y.shape[1]
+# 	y_mean = np.mean(y, axis = 0)
+# 	y_std = np.std(y, axis = 0)
+# 	z = 1.96
+# 	upper_ci = y_mean + z*y_std/np.sqrt(runs)
+# 	lower_ci = y_mean - z*y_std/np.sqrt(runs)
 
-	CI_df = pd.DataFrame(columns = ['x_data', 'low_CI', 'upper_CI'])
-	CI_df['x_data'] = np.arange(1, T+1)
-	CI_df['low_CI'] = lower_ci
-	CI_df['upper_CI'] = upper_ci
-	CI_df.sort_values('x_data', inplace = True)
+# 	CI_df = pd.DataFrame(columns = ['x_data', 'low_CI', 'upper_CI'])
+# 	CI_df['x_data'] = np.arange(1, T+1)
+# 	CI_df['low_CI'] = lower_ci
+# 	CI_df['upper_CI'] = upper_ci
+# 	CI_df.sort_values('x_data', inplace = True)
 
-	_, ax = plt.subplots()
-	# Plot the data, set the linewidth, color and transparency of the
-	# line, provide a label for the legend
-	ax.plot(np.arange(1, T+1), y_mean, lw = 1, color = '#539caf', alpha = 1, label = 'Mean')
-	# Shade the confidence interval
-	ax.fill_between(CI_df['x_data'], CI_df['low_CI'], CI_df['upper_CI'], color = '#539caf', alpha = 0.4, label = '95% CI')
-	# Label the axes and provide a title
-	ax.set_title(title)
-	ax.set_xlabel(x_label)
-	ax.set_ylabel(y_label)
+# 	_, ax = plt.subplots()
+# 	# Plot the data, set the linewidth, color and transparency of the
+# 	# line, provide a label for the legend
+# 	ax.plot(np.arange(1, T+1), y_mean, lw = 1, color = '#539caf', alpha = 1, label = 'Mean')
+# 	# Shade the confidence interval
+# 	ax.fill_between(CI_df['x_data'], CI_df['low_CI'], CI_df['upper_CI'], color = '#539caf', alpha = 0.4, label = '95% CI')
+# 	# Label the axes and provide a title
+# 	ax.set_title(title)
+# 	ax.set_xlabel(x_label)
+# 	ax.set_ylabel(y_label)
 
-	# Display legend
-	ax.legend(loc = 'best')
-	plt.show()
+# 	# Display legend
+# 	ax.legend(loc = 'best')
+# 	plt.show()
 
+# plot_ci(pf_ucb, 'Performance', 'Number of Patients', 'Performance vs Number of Patients')
 # plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
 # plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
 
+# materials = ['All', '1+5', '1+2+5', '1+3+5', '1+4+5']
+# total = len(materials)
+# x_pos = np.arange(total)
+# CTEs = [np.mean(perform[i]) for i in range(total)]
+# error = [np.std(perform[i]) for i in range(total)]
+# CTEs = [0.653183789, 0.623769898, 0.589544139, 0.614218522, 0.607706223, 0.642329956, 0.610202606]
+# error = [0.006534774, 0.008584064, 0.024959103, 0.008003431, 0.001520397, 0.016777048, 0.000418809]
 
+# CTEs = [0.653183789, 0.647539796, 0.653871201, 0.651808973, 0.658285094, 0.624131693]
+# error = [0.006534774, 0.002597875, 0.004810099, 0.009068999, 0.007622626, 0.009374178]
+
+# CTEs = [0.653183789, 0.64866465, 0.658229435, 0.66121563, 0.65402396]
+# error = [0.006534774, 0.019940785, 0.005547286, 0.006167932, 0.008293749]
+
+# print ("Avg_overall", perform_avg)
+# Build the plot
+# fig, ax = plt.subplots()
+# ax.bar(x_pos, CTEs, yerr=error, align='center', alpha=0.5, ecolor='black', capsize=10)
+# ax.set_ylabel('Performance (Fraction of correct decisions)')
+# ax.set_xticks(x_pos)
+# ax.set_xticklabels(materials)
+# ax.set_title('Choosing the right feature combination (10 permutations of patients)')
+# ax.yaxis.grid(True)
+
+# # Save the figure and show
+# plt.tight_layout()
+# # plt.savefig('bar_plot_with_error_bars.png')
+# plt.show()
+
+
+def plot_confusion_matrix(y_true, y_pred, classes,
+                          normalize=False,
+                          title=None,
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if not title:
+        if normalize:
+            title = 'Normalized confusion matrix'
+        else:
+            title = 'Confusion matrix, without normalization'
+
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
+    ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set(xticks=np.arange(cm.shape[1]),
+           yticks=np.arange(cm.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=classes, yticklabels=classes,
+           title=title,
+           ylabel='True label',
+           xlabel='Predicted label')
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    fig.tight_layout()
+    return ax
+
+# np.set_printoptions(precision=2)
+
+# # Plot non-normalized confusion matrix
+# plot_confusion_matrix(ground_truth, actions, classes=np.arange(3),
+#                       title='Confusion Matrix, without Normalization')
+
+# # Plot normalized confusion matrix
+# plot_confusion_matrix(ground_truth, actions, classes=np.arange(3), normalize=True,
+#                       title='Normalized Confusion Matrix')
+
+# plt.show()
+
+# target_names = ['Arm 0 (Low)', 'Arm 1 (Medium)', 'Arm 2 (High)']
+# print(classification_report(ground_truth, actions, target_names=target_names))
 #LASSO Bandit
-# features = np.array([g + r + e + age + ind + dia + hrt + val + sm + asp + c + v1 + v2 + v3 + v4 + v5 + v6 + v7 + b for g, r, e, age, ind, dia, hrt, val, sm, asp, c, v1, v2, v3, v4, v5, v6, v7, b in \
-# zip(gender, race, ethnicity, age_decades, diagnosis, diabetes, heart, valve, smoker, aspirin, cyp2, vk3673, vk5808, vk6484, vk6853, vk9041, vk7566, vk961, bias)])
-
-# features = np.column_stack((height_features, weight_features, features, right_dosage))
-
-# print (x_input[2], ground_truth[2])
 
 # for trial in range(1, 2):
 
-trial = 0
+# trial = 100
 
-if trial == 0:
-	features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
-elif trial == 1:
-	features = np.column_stack((demographics, bias, right_dosage))
-elif trial == 2:
-	features = np.column_stack((diagnosis, bias, right_dosage))
-elif trial == 3:
-	features = np.column_stack((preexisting, bias, right_dosage))
-elif trial == 4:
-	features = np.column_stack((medications, bias, right_dosage))
-elif trial == 5:
-	features = np.column_stack((genetics, bias, right_dosage))
+# if trial == 0:
+# 	features = np.column_stack((demographics, diagnosis, preexisting, medications, genetics, bias, right_dosage))
+# elif trial == 1:
+# 	features = np.column_stack((demographics, bias, right_dosage))
+# elif trial == 2:
+# 	features = np.column_stack((diagnosis, bias, right_dosage))
+# elif trial == 3:
+# 	features = np.column_stack((preexisting, bias, right_dosage))
+# elif trial == 4:
+# 	features = np.column_stack((medications, bias, right_dosage))
+# elif trial == 5:
+# 	features = np.column_stack((genetics, bias, right_dosage))
+# elif trial == 6:
+# 	features = np.column_stack((diagnosis, preexisting, medications, genetics, bias, right_dosage))
+# elif trial == 7:
+# 	features = np.column_stack((demographics, preexisting, medications, genetics, bias, right_dosage))
+# elif trial == 8:
+# 	features = np.column_stack((demographics, diagnosis, medications, genetics, bias, right_dosage))
+# elif trial == 9:
+# 	features = np.column_stack((demographics, diagnosis, preexisting, genetics, bias, right_dosage))
+# elif trial == 10:
+# 	features = np.column_stack((demographics, diagnosis, preexisting, medications, bias, right_dosage))
+# elif trial == 11:
+# 	features = np.column_stack((demographics, diagnosis, genetics, bias, right_dosage))
+# elif trial == 12:
+# 	features = np.column_stack((demographics, diagnosis, preexisting, bias, right_dosage))
+# elif trial == 13:
+# 	features = np.column_stack((bias, right_dosage))
+# elif trial == 14:
+# 	features = np.column_stack((demographics, preexisting, genetics, bias, right_dosage))
 
-runs = 5
+trial = 14
+features = np.column_stack((demographics, preexisting, genetics, bias, right_dosage))
+
+runs = 0
 d = features.shape[1] - 1
 T = num_patients
 K = 3
 regret = np.zeros((runs, T))
 avg_incorrect = np.zeros((runs, T))
+pf_lasso = np.zeros(runs)
+pf = np.zeros((runs, T))
 lam1 = 0.05
 q = 1
 h = 5
-
+actions = np.zeros(T)
 forced = np.array([[(2**n - 1)*K*q + j for n in np.arange(11) for j in np.arange(1 + (i-1)*int(q), 1 + int(i*q))] for i in range(K)])
 
 def estimate(X, Y, lam, x):
-	clf = Lasso(alpha = lam/2,  max_iter=100000)
+	clf = Lasso(alpha = lam/2,  max_iter=10000)
 	clf.fit(X, Y)
 	y = clf.predict(np.expand_dims(x, axis = 0))
 	return y
@@ -557,13 +721,31 @@ for n in range(runs):
 		Y_t[t] = reward
 		regret[n, t] = regret[n, t-1] - reward if t != 0 else -reward
 		sum_incorrect += -reward 
-		pf = 1 - sum_incorrect/(t+1)
-		# print (t, pf)
+		pf[n, t] = 1 - sum_incorrect/(t+1)
+		print (n, t, pf[n, t])
 		avg_incorrect[n, t] = sum_incorrect/(t+1.0)
+		actions[t] = act
 
-	pf_lasso = 1.0 - sum_incorrect/T
+	pf_lasso[n] = 1.0 - sum_incorrect/T
 	print (trial, n, "Performance", pf_lasso)
 
-plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
-plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
+# np.set_printoptions(precision=2)
+
+# # Plot non-normalized confusion matrix
+# plot_confusion_matrix(ground_truth, actions, classes=np.arange(3),
+#                       title='Confusion Matrix, without Normalization')
+
+# # Plot normalized confusion matrix
+# plot_confusion_matrix(ground_truth, actions, classes=np.arange(3), normalize=True,
+#                       title='Normalized Confusion Matrix')
+
+# plt.show()
+
+# target_names = ['Arm 0 (Low)', 'Arm 1 (Medium)', 'Arm 2 (High)']
+# print(classification_report(ground_truth, actions, target_names=target_names))
+
+# print (trial, pf_lasso)
+# plot_ci(pf, 'Performance', 'Number of Patients', 'Performance vs Number of Patients')
+# plot_ci(regret, 'Regret', 'Number of Patients', 'Regret vs Number of Patients')
+# plot_ci(avg_incorrect, 'Fraction of Incorrect Decisions', 'Number of Patients', 'Fraction of Incorrect Decisions vs Number of Patients')
 
